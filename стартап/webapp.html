@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Дивитись разом</title>
+<style>
+body { font-family: Arial, sans-serif; background: #121212; color: #fff; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
+header { padding: 10px; background: #1e1e1e; text-align: center; font-size: 1.2em; }
+main { flex: 1; display: flex; flex-direction: row; }
+#video-container { flex: 2; background: #000; display: flex; justify-content: center; align-items: center; }
+#chat-container { flex: 1; display: flex; flex-direction: column; border-left: 1px solid #333; }
+#chat-messages { flex: 1; overflow-y: auto; padding: 10px; }
+#chat-input { display: flex; }
+#chat-input input { flex: 1; padding: 5px; }
+#chat-input button { padding: 5px; }
+video { max-width: 100%; max-height: 100%; background: #000; }
+.message { margin-bottom: 5px; }
+.message .user { font-weight: bold; }
+</style>
+</head>
+<body>
+
+<header>Кімната для спільного перегляду</header>
+<main>
+<div id="video-container">
+    <video id="video" controls>
+        <source id="video-src" src="" type="video/mp4">
+        Ваш браузер не підтримує відео.
+    </video>
+</div>
+<div id="chat-container">
+    <div id="chat-messages"></div>
+    <div id="chat-input">
+        <input type="text" id="msg-input" placeholder="Напиши повідомлення...">
+        <button id="send-btn">Відправити</button>
+    </div>
+</div>
+</main>
+
+<script>
+// ====== Отримуємо room_id з URL ======
+const urlParams = new URLSearchParams(window.location.search);
+const roomId = urlParams.get('room');
+if (!roomId) {
+    document.body.innerHTML = "<h2>Помилка: Room ID не знайдено</h2>";
+    throw new Error("Room ID не знайдено");
+}
+
+// ====== WebSocket ======
+const ws = new WebSocket(`wss://${window.location.hostname}:8765/?room=${roomId}`);
+
+const video = document.getElementById("video");
+const chatMessages = document.getElementById("chat-messages");
+const msgInput = document.getElementById("msg-input");
+const sendBtn = document.getElementById("send-btn");
+
+// ====== Надсилаємо повідомлення на сервер ======
+sendBtn.addEventListener("click", () => {
+    const text = msgInput.value.trim();
+    if (!text) return;
+    ws.send(JSON.stringify({type: "chat", text, user: "Користувач"}));
+    msgInput.value = "";
+});
+
+// ====== Прийом повідомлень ======
+ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === "chat") {
+        const div = document.createElement("div");
+        div.classList.add("message");
+        div.innerHTML = `<span class="user">${data.user}:</span> ${data.text}`;
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    } else if (data.type === "video") {
+        // синхронізація відео
+        if (data.action === "play") video.play();
+        else if (data.action === "pause") video.pause();
+        else if (data.action === "seek") video.currentTime = data.time;
+    }
+};
+
+// ====== Синхронізація відео ======
+video.addEventListener("play", () => ws.send(JSON.stringify({type: "video", action: "play"})));
+video.addEventListener("pause", () => ws.send(JSON.stringify({type: "video", action: "pause"})));
+video.addEventListener("seeked", () => ws.send(JSON.stringify({type: "video", action: "seek", time: video.currentTime})));
+
+// ====== Встановлюємо початкове відео ======
+video.src = "https://www.w3schools.com/html/mov_bbb.mp4"; // можна замінити на будь-яке відео
+</script>
+
+</body>
+</html>
+
